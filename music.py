@@ -1,4 +1,6 @@
-class MusicGenerator:
+import numpy as np
+
+class ChordGenerator:
 
     ROOTSHIFT = {'C':0, 'Db':1, 'D':2, 'Eb':3, 'E':4, 'F':5, 
                 'Gb':6, 'G':7, 'Ab':8, 'A':9,'Bb':10, 'B':11}
@@ -10,7 +12,9 @@ class MusicGenerator:
     OCTAVE_C = [12, 24, 36, 48, 60, 72, 84, 96, 108]
     MIDDLE_C = OCTAVE_C[4]
 
-    def __init__(self): pass
+    def __init__(self, purity_ratio:float=0.8):
+        self.purity_ratio = purity_ratio
+        self.generate_transition_matrix()
 
     def roman2degree(self, roman_numeral:str):
         root_degree = self.ROMAN2DEGREE[roman_numeral.lower()]
@@ -36,3 +40,33 @@ class MusicGenerator:
             root_degree -= 1
             chords.append(self.get_chord(root_degree, scale, chord_type, octave_c))
         return chords
+    
+    def generate_transition_matrix(self):
+        states = list(self.ROMAN2DEGREE.keys()) + [k.upper() for k in self.ROMAN2DEGREE.keys()]
+        self.M_transition_matrix = {}
+        self.m_transition_matrix = {}
+        M_pref = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii', 'iv', 'VI']
+        m_pref = []
+        for cur in states:
+            self.M_transition_matrix[cur] = {}
+            self.m_transition_matrix[cur] = {}
+            for next in states:
+                if next in M_pref:
+                    p = self.purity_ratio/len(M_pref)
+                else:
+                    p = (1-self.purity_ratio)/(len(states)-len(M_pref))
+                self.M_transition_matrix[cur][next] = p
+                self.m_transition_matrix[cur][next] = 0.0
+        
+    def get_next_chord(self, chord):
+        p = np.random.random()
+        total = 0
+        for next_chord, prob in self.M_transition_matrix[chord].items():
+            total += prob
+            if p < total: break
+        return next_chord
+# Cmaj 
+# I ii iii IV V vi viiº
+# Cmin
+# i iiº III iv v VI VII
+

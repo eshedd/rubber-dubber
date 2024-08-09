@@ -1,7 +1,7 @@
 import time
 import rtmidi
 import threading
-from music import MusicGenerator
+from music import ChordGenerator
 
 class MidiPlayer:
     def __init__(self):
@@ -21,32 +21,89 @@ class MidiPlayer:
         while True:
             self.user_input = input("Enter 1 to play as normal, 2 to hold first melody note and cut drum loop in half: ")
 
-def play(mp: MidiPlayer, channel:int, notes:list, velocity:int):
-    for note in notes:
-        note_on = [0x90 + channel, note, velocity]
-        mp.midiout.send_message(note_on)
+    def play(self, channel:int, notes:list, velocity:int):
+        for note in notes:
+            note_on = [0x90 + channel, note, velocity]
+            self.midiout.send_message(note_on)
 
-def stop(mp: MidiPlayer, channel:int, notes:list):
-    for note in notes:
-        note_off = [0x80 + channel, note, 0]
-        mp.midiout.send_message(note_off)
+    def stop(self, channel:int, notes:list):
+        for note in notes:
+            note_off = [0x80 + channel, note, 0]
+            self.midiout.send_message(note_off)
 
-def play_drum_and_melody(mp: MidiPlayer, drum_notes: list, melody_notes: list, wait_time: float):
-    drum_channel = 0
-    melody_channel = 1
-    velocity = 100
+class Song:
+    def __init__(self, mp:MidiPlayer, bpm:int, drop_note:int, bpc:int=8, standard_velocity:int=100):
+        self.mp = mp
+        self.bpm = bpm
+        self.bpc = bpc  # beats per chord (harmonic rhythm)
+        self.standard_velocity = standard_velocity
+        self.quarter_note_duration = 60/bpm  # quarter note in seconds
+        self.eighth_note_duration = self.quarter_note_duration/2
+        self.drop_note = drop_note
 
-    play(mp, drum_channel, drum_notes, velocity)
-    play(mp, melody_channel, melody_notes, velocity)
-    time.sleep(wait_time)
-    stop(mp, melody_channel, melody_notes)
+    def set_drum(self, drum_channel:int, drum_pattern:list):
+        self.drum_channel = drum_channel
+        self.drum_pattern = drum_pattern
+
+    def set_melody(self, channel:int, chords:list):
+        self.melody_channel = channel
+        self.chords = chords
+    
+    def _drop_beat(self):
+        note_on = [0x90 + 2, self.drop_note, 127]
+        note_off = [0x80 + 2, self.drop_note, 0]
+        self.mp.midiout.send_message(note_on)
+        time.sleep(1.5)
+        self.mp.midiout.send_message(note_off)
+    
+    def _standard_bar(self):
+        for chord in self.chords:
+            melody_notes = chord
+            for beat in range(self.bpc):
+                drum_notes = self.drum_pattern[beat % len(self.drum_pattern)]
+                self._play_drum_and_melody(drum_notes, melody_notes, self.eighth_note_duration)
+    
+    def _suspense_bar(self):
+        for chord in self.chords:
+            melody_notes = chord
+            self._play_drum_and_melody(self.drum_pattern[0], [melody_notes[0]], self.eighth_note_duration/2)
+
+    def _generating_bar(self):
+        pass
+
+    def _play_drum_and_melody(self, drum_notes: list, melody_notes: list, wait_time: float):
+        mp.play(self.drum_channel, drum_notes, self.standard_velocity)
+        mp.play(self.melody_channel, melody_notes, self.standard_velocity)
+        time.sleep(wait_time)
+        mp.stop(self.melody_channel, melody_notes)
+
+    def play(self, repeats:int=100):
+        for _ in range(repeats):
+            if self.mp.user_input == '1':
+                self._standard_bar()
+            elif self.mp.user_input == '2':
+                self._suspense_bar()
+            else:
+                return
+            if self.mp.user_input == '1' and self.mp.previous_input == '2':
+                self._drop_beat()
+            self.mp.previous_input = self.mp.user_input
+        
+    def gplay(self, key:tuple=('C', 'major'), steps:int=100):
+        cg = ChordGenerator(purity_ratio=0.95)
+        self.melody_channel = 1
+        chord = ('I', None)
+        for _ in range(steps):
+            if self.mp.user_input != '1':
+                return
+            chord = cg.get_next_chord(chord[0])
+            melody_notes = cg.generate_chords(key, [(chord, None)])[0]
+            for beat in range(self.bpc):
+                drum_notes = self.drum_pattern[beat % len(self.drum_pattern)]
+                self._play_drum_and_melody(drum_notes, melody_notes, self.eighth_note_duration)
 
 
-def main(mp: MidiPlayer, melody_chords:list):
-    bpm = 125
-    quarter_note_duration = 60/bpm  # quarter note in seconds
-    eighth_note_duration = quarter_note_duration/2  # eighth note in seconds
-
+def main(mp: MidiPlayer, endless_generation=False):
     # Trance drum pattern (Kick, Hi-Hat, Clap, Hi-Hat)
     drum_pattern = [
         [36],  # Kick
@@ -55,58 +112,33 @@ def main(mp: MidiPlayer, melody_chords:list):
         [42]   # Hi-Hat
     ]
 
-    # Melody: B-flat minor, F minor, A-flat major, E-flat major over G
-    # melody_chords = [
-    #     [70, 74, 77],  # B-flat minor (Bb, Db, F)
-    #     [65, 69, 72],  # F minor (F, Ab, C)
-    #     [68, 72, 75],  # A-flat major (Ab, C, Eb)
-    #     [67, 70, 75]   # E-flat major over G (G, Bb, Eb)
-    # ]
+    cg = ChordGenerator()
+    key = ('Bb', 'minor')
+    progression = [('I', None)]
+    for _ in range(3):
+        chord = cg.get_next_chord(progression[-1][0])
+        progression.append((chord, None))
+    melody_chords = cg.generate_chords(key, progression)
+    
+    song = Song(mp, bpm=180, drop_note=40, bpc=8)
+    song.set_drum(0, drum_pattern)
+    song.set_melody(1, melody_chords)
 
-    # melody_chords = [[60, 64, 67], [67, 71, 74], [69, 72, 76], [53, 57, 60]]
-    drop_note = 46
-
-    while True:
-        user_input = mp.user_input
-        if user_input == '1' and mp.previous_input == '2':  # beat drop
-            # Send a single pulse on channel 3 when switching from '2' to '1'
-            note_on = [0x90 + 2, drop_note, 127]
-            note_off = [0x80 + 2, drop_note, 0]
-            mp.midiout.send_message(note_on)
-            time.sleep(1.5)
-            mp.midiout.send_message(note_off)
-
-        mp.previous_input = user_input
-
-        for i in range(len(melody_chords)):
-            melody_notes = melody_chords[i]
-            if user_input == '1':  # normal beat
-                # Play drum and melody together for 8 beats
-                for j in range(8):
-                    drum_notes = drum_pattern[j % len(drum_pattern)]
-                    play_drum_and_melody(mp, drum_notes, melody_notes, eighth_note_duration)
-            elif user_input == '2':  # suspense beat
-                # Hold first melody note and cut drum loop in half
-                play_drum_and_melody(mp, drum_pattern[0], [melody_notes[0]], eighth_note_duration / 2)
-            else:
-                return
+    if endless_generation:
+        print('continuously generating chords...')
+        song.gplay()
+    else:
+        print(progression)
+        song.play()
+    
+    
+    
 if __name__ == '__main__':
     mp = MidiPlayer()
-    mg = MusicGenerator()
-
-    key = ('C', 'major')
-
-    progression = [('I', None)]
-    for _ in range(4):
-        chord = mg.get_next_chord('I')
-        progression.append((chord, None))
-    print(progression)
-    melody_chords = mg.generate_chords(key, progression)
-
     input_thread = threading.Thread(target=mp.listen_for_input)
     input_thread.daemon = True
     input_thread.start()
     with mp.midiout:
-        time.sleep(1)
-        main(mp, melody_chords)
+        time.sleep(2)
+        main(mp, endless_generation=False)
     mp.destruct()
