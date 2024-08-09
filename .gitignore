@@ -1,3 +1,4 @@
 .venv
 .DS_Store
 Midi_Set Project/Backup
+weights/*
