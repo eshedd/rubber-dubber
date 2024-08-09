@@ -1,6 +1,7 @@
 import time
 import rtmidi
 import threading
+from music import MusicGenerator
 
 class MidiPlayer:
     def __init__(self):
@@ -13,11 +14,6 @@ class MidiPlayer:
         self.user_input = '1'
         self.previous_input = '1'
 
-    def play_note(self, note_on: list, note_off: list, wait_time: float):
-        self.midiout.send_message(note_on)
-        time.sleep(wait_time)
-        self.midiout.send_message(note_off)
-
     def destruct(self):
         del self.midiout
 
@@ -25,34 +21,31 @@ class MidiPlayer:
         while True:
             self.user_input = input("Enter 1 to play as normal, 2 to hold first melody note and cut drum loop in half: ")
 
+def play(mp: MidiPlayer, channel:int, notes:list, velocity:int):
+    for note in notes:
+        note_on = [0x90 + channel, note, velocity]
+        mp.midiout.send_message(note_on)
+
+def stop(mp: MidiPlayer, channel:int, notes:list):
+    for note in notes:
+        note_off = [0x80 + channel, note, 0]
+        mp.midiout.send_message(note_off)
+
 def play_drum_and_melody(mp: MidiPlayer, drum_notes: list, melody_notes: list, wait_time: float):
-    drum_channel = 0  # Channel 1 for drum
-    melody_channel = 1  # Channel 2 for pitched instrument
+    drum_channel = 0
+    melody_channel = 1
     velocity = 100
 
-    # Play drum notes
-    for note in drum_notes:
-        note_on = [0x90 + drum_channel, note, velocity]
-        mp.midiout.send_message(note_on)
-        note_off = [0x80 + drum_channel, note, 0]
-        mp.midiout.send_message(note_off)
-
-    # Play melody notes
-    for note in melody_notes:
-        note_on = [0x90 + melody_channel, note, velocity]
-        mp.midiout.send_message(note_on)
-
+    play(mp, drum_channel, drum_notes, velocity)
+    play(mp, melody_channel, melody_notes, velocity)
     time.sleep(wait_time)
+    stop(mp, melody_channel, melody_notes)
 
-    # Turn off melody notes
-    for note in melody_notes:
-        note_off = [0x80 + melody_channel, note, 0]
-        mp.midiout.send_message(note_off)
 
 def main(mp: MidiPlayer):
-    # Tempo: 122 BPM -> 0.4918 seconds per beat
-    bpm = 122
-    beat_duration = 30 / bpm
+    bpm = 125
+    quarter_note_duration = 60/bpm  # quarter note in seconds
+    eighth_note_duration = quarter_note_duration/2  # eighth note in seconds
 
     # Trance drum pattern (Kick, Hi-Hat, Clap, Hi-Hat)
     drum_pattern = [
@@ -70,34 +63,41 @@ def main(mp: MidiPlayer):
         [67, 70, 75]   # E-flat major over G (G, Bb, Eb)
     ]
 
-    # Main notes for each chord
+    melody_chords = [[60, 64, 67], [67, 71, 74], [69, 72, 76], [53, 57, 60]]
     drop_note = 46
 
     while True:
         user_input = mp.user_input
-        if user_input == '1' and mp.previous_input == '2':
+        if user_input == '1' and mp.previous_input == '2':  # beat drop
             # Send a single pulse on channel 3 when switching from '2' to '1'
             note_on = [0x90 + 2, drop_note, 127]
             note_off = [0x80 + 2, drop_note, 0]
             mp.midiout.send_message(note_on)
-            time.sleep(5)
+            time.sleep(1.5)
             mp.midiout.send_message(note_off)
 
         mp.previous_input = user_input
 
         for i in range(len(melody_chords)):
             melody_notes = melody_chords[i]
-            if user_input == '1':
+            if user_input == '1':  # normal beat
                 # Play drum and melody together for 8 beats
                 for j in range(8):
                     drum_notes = drum_pattern[j % len(drum_pattern)]
-                    play_drum_and_melody(mp, drum_notes, melody_notes, beat_duration)
-            elif user_input == '2':
+                    play_drum_and_melody(mp, drum_notes, melody_notes, eighth_note_duration)
+            elif user_input == '2':  # suspense beat
                 # Hold first melody note and cut drum loop in half
-                play_drum_and_melody(mp, drum_pattern[0], [melody_notes[0]], beat_duration / 2)
-
+                play_drum_and_melody(mp, drum_pattern[0], [melody_notes[0]], eighth_note_duration / 2)
+            else:
+                return
 if __name__ == '__main__':
     mp = MidiPlayer()
+    mg = MusicGenerator()
+
+    # key = ('C', 'major')
+    # progression = [('I', None), ('V', None), ('vi', None), ('IV', mg.OCTAVE_C[3])]
+    # chords = mg.generate_chords(key, progression)
+
     input_thread = threading.Thread(target=mp.listen_for_input)
     input_thread.daemon = True
     input_thread.start()
