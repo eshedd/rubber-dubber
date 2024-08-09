@@ -42,7 +42,7 @@ def play_drum_and_melody(mp: MidiPlayer, drum_notes: list, melody_notes: list, w
     stop(mp, melody_channel, melody_notes)
 
 
-def main(mp: MidiPlayer):
+def main(mp: MidiPlayer, melody_chords:list):
     bpm = 125
     quarter_note_duration = 60/bpm  # quarter note in seconds
     eighth_note_duration = quarter_note_duration/2  # eighth note in seconds
@@ -56,14 +56,14 @@ def main(mp: MidiPlayer):
     ]
 
     # Melody: B-flat minor, F minor, A-flat major, E-flat major over G
-    melody_chords = [
-        [70, 74, 77],  # B-flat minor (Bb, Db, F)
-        [65, 69, 72],  # F minor (F, Ab, C)
-        [68, 72, 75],  # A-flat major (Ab, C, Eb)
-        [67, 70, 75]   # E-flat major over G (G, Bb, Eb)
-    ]
+    # melody_chords = [
+    #     [70, 74, 77],  # B-flat minor (Bb, Db, F)
+    #     [65, 69, 72],  # F minor (F, Ab, C)
+    #     [68, 72, 75],  # A-flat major (Ab, C, Eb)
+    #     [67, 70, 75]   # E-flat major over G (G, Bb, Eb)
+    # ]
 
-    melody_chords = [[60, 64, 67], [67, 71, 74], [69, 72, 76], [53, 57, 60]]
+    # melody_chords = [[60, 64, 67], [67, 71, 74], [69, 72, 76], [53, 57, 60]]
     drop_note = 46
 
     while True:
@@ -94,14 +94,19 @@ if __name__ == '__main__':
     mp = MidiPlayer()
     mg = MusicGenerator()
 
-    # key = ('C', 'major')
-    # progression = [('I', None), ('V', None), ('vi', None), ('IV', mg.OCTAVE_C[3])]
-    # chords = mg.generate_chords(key, progression)
+    key = ('C', 'major')
+
+    progression = [('I', None)]
+    for _ in range(4):
+        chord = mg.get_next_chord('I')
+        progression.append((chord, None))
+    print(progression)
+    melody_chords = mg.generate_chords(key, progression)
 
     input_thread = threading.Thread(target=mp.listen_for_input)
     input_thread.daemon = True
     input_thread.start()
     with mp.midiout:
         time.sleep(1)
-        main(mp)
+        main(mp, melody_chords)
     mp.destruct()
